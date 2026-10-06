@@ -1,0 +1,14 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';import {readFile,stat} from 'node:fs/promises';import vm from 'node:vm';
+test('manifest and PNG dimensions',async()=>{const m=JSON.parse(await readFile('public/manifest.webmanifest','utf8'));assert.equal(m.lang,'he');assert.equal(m.dir,'rtl');assert.equal(m.display,'standalone');for(const icon of m.icons){const b=await readFile('public/'+icon.src.replace('./',''));const n=Number(icon.sizes.split('x')[0]);assert.equal(b.toString('ascii',1,4),'PNG');assert.equal(b.readUInt32BE(16),n);assert.equal(b.readUInt32BE(20),n);}assert.ok(m.icons.some(i=>i.purpose==='maskable'));});
+test('complete offline cache and coherent version activation',async()=>{const listeners={};let installed,deleted=[];const c={addAll:async paths=>installed=paths,match:async request=>request.url.includes('unknown')?undefined:{cached:true}};const ctx={self:{addEventListener:(type,fn)=>listeners[type]=fn,clients:{claim:async()=>{}},location:{origin:'http://localhost:4173'}},caches:{open:async()=>c,keys:async()=>['connect-four-v0','unrelated'],delete:async name=>deleted.push(name)},fetch:async()=>{throw Error('offline')},URL};vm.runInNewContext(await readFile('public/sw.js','utf8'),ctx);let wait;listeners.install({waitUntil:p=>wait=p});await wait;for(const path of installed)await stat('public/'+(path==='./'?'index.html':path.replace('./','')));for(const required of ['./ai-worker.js','./ai.js','./game.js','./app.js','./styles.css'])assert.ok(installed.includes(required));listeners.activate({waitUntil:p=>wait=p});await wait;assert.deepEqual(deleted,['connect-four-v0']);let response;listeners.fetch({request:{url:'http://localhost:4173/ai-worker.js',method:'GET',mode:'same-origin'},respondWith:p=>response=p});assert.equal((await response).cached,true);assert.equal('skipWaiting' in ctx.self,false);});
+test('build gives each changed application a distinct cache version',async()=>{
+ const {mkdtemp,cp,writeFile,rm}=await import('node:fs/promises');const {tmpdir}=await import('node:os');const {join,resolve}=await import('node:path');const {execFileSync}=await import('node:child_process');
+ const dir=await mkdtemp(join(tmpdir(),'connect-four-build-'));try{
+  await cp('public',join(dir,'public'),{recursive:true});const script=resolve('scripts/build.js');
+  execFileSync(process.execPath,[script],{cwd:dir});const first=await readFile(join(dir,'dist/sw.js'),'utf8');
+  execFileSync(process.execPath,[script],{cwd:dir});assert.equal(await readFile(join(dir,'dist/sw.js'),'utf8'),first);
+  await writeFile(join(dir,'public/app.js'),(await readFile('public/app.js','utf8'))+'\n// new release\n');
+  execFileSync(process.execPath,[script],{cwd:dir});const second=await readFile(join(dir,'dist/sw.js'),'utf8');
+  assert.notEqual(second,first);assert.notEqual(second.match(/const CACHE='([^']+)'/)[1],first.match(/const CACHE='([^']+)'/)[1]);
+ }finally{await rm(dir,{recursive:true,force:true});}
+});

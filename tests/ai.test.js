@@ -1,0 +1,5 @@
+import {test} from 'node:test';import assert from 'node:assert/strict';
+import {createBoard,dropDisk,legalColumns} from '../public/game.js';import {chooseMove} from '../public/ai.js';
+for(const level of ['easy','medium','hard'])test(level+' legal, forced and terminal',()=>{assert.ok(legalColumns(createBoard()).includes(chooseMove(createBoard(),2,level,()=>0)));const b=Array.from({length:6},(_,r)=>Array.from({length:7},(_,c)=>c===6?0:((c+Math.floor(r/2))%2)+1));assert.equal(chooseMove(b,2,level,()=>0),6);for(let r=0;r<6;r++)b[r][6]=r%2+1;assert.equal(chooseMove(b,2,level),null);const won=createBoard();won[5]=[1,1,1,1,0,0,0];assert.equal(chooseMove(won,2,level),null)});
+for(const level of ['medium','hard'])for(const p of [1,2])test(level+' '+(p===2?'wins':'blocks'),()=>{const b=createBoard();b[5]=[p,p,p,0,0,0,0];assert.equal(chooseMove(b,2,level),3)});
+test('hard avoids allowing a double threat in two plies',()=>{const b=createBoard();b[5]=[0,1,1,0,2,0,2];assert.ok([0,3].includes(chooseMove(b,2,'hard')))});

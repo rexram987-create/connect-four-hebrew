@@ -1,0 +1,5 @@
+.codex/
+.superpowers/
+node_modules/
+dist/
+artifacts/

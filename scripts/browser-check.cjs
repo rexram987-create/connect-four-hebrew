@@ -1,0 +1,26 @@
+const assert = require('node:assert/strict');
+const {chromium} = require(process.env.CODEX_PRIMARY_RUNTIME_NODE_MODULES+'/playwright');
+(async()=>{
+ const browser=await chromium.launch({headless:true});
+ const context=await browser.newContext({viewport:{width:360,height:800},reducedMotion:'reduce'});
+ const page=await context.newPage();const errors=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto(process.env.GAME_URL||'http://localhost:4173');
+ await page.getByRole('heading',{name:'ארבע בשורה',exact:true}).waitFor({timeout:3000});
+ assert.equal(await page.locator('.column').count(),7);
+ await page.locator('#mode').selectOption('local');
+ for(const c of [0,6,1,6,2,5,3])await page.locator('.column').nth(c).click();
+ assert.equal(await page.locator('.disk.red').count(),4);assert.equal(await page.locator('.winner').count(),4);
+ assert.match(await page.locator('#status').innerText(),/ניצח/);
+ assert.equal(await page.locator('.column:disabled').count(),7);
+ await page.locator('#new-game').click();assert.equal(await page.locator('.disk.red').count(),0);
+ await page.locator('.column').nth(0).focus();await page.keyboard.press('Enter');assert.equal(await page.locator('.disk.red').count(),1);
+ await page.locator('#mode').selectOption('computer');await page.locator('#difficulty').selectOption('hard');
+ await page.locator('.column').nth(3).click();
+ await page.evaluate(()=>{document.querySelectorAll('.column')[2].click();document.querySelector('#new-game').click()});
+ await page.waitForTimeout(900);assert.equal(await page.locator('.disk.red,.disk.yellow').count(),0);
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true);
+ await page.evaluate(()=>localStorage.setItem('connect-four-settings','{broken'));await page.reload();
+ assert.equal(await page.locator('#mode').inputValue(),'computer');
+ await page.screenshot({path:'artifacts/mobile-game.png',fullPage:true});
+ assert.deepEqual(errors,[]);await browser.close();console.log('Browser checks passed');
+})().catch(e=>{console.error(e);process.exit(1)});
